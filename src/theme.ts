@@ -2,22 +2,31 @@ import type { ThemeConfig } from 'antd';
 
 export const theme: ThemeConfig = {
     token: {
-        colorPrimary: '#1E5EFF',      // синий
-        colorTextBase: '#111111',     // почти чёрный
-        colorBorder: '#D9D9D9',       // серый
-        colorBgLayout: '#F5F6F8',     // светло-серый фон
-        borderRadius: 6,
+        colorPrimary: '#1E5EFF',
+        colorTextBase: '#FFFFFF',
+        colorBgBase: '#000000',
+        colorBorder: '#333333',
+        borderRadius: 8,
         fontFamily: "'Inter', -apple-system, sans-serif",
     },
     components: {
         Layout: {
-            headerBg: '#111111',
+            headerBg: '#000000',
             headerColor: '#FFFFFF',
-            siderBg: '#1A1A1A',
+            siderBg: '#000000',
+            bodyBg: '#000000',
         },
-        Table: {
-            headerBg: '#F5F6F8',
-            headerColor: '#111111',
+        Menu: {
+            darkItemBg: '#000000',
+            darkItemSelectedBg: '#1E5EFF',
+            darkItemSelectedColor: '#FFFFFF',
+            darkItemColor: '#9CA3AF',
+            darkItemHoverBg: 'transparent',
         },
+        Card: {
+            colorBgContainer: '#111111',
+            colorText: '#FFFFFF',
+            colorBorderSecondary: '#333333',
+        }
     },
 };

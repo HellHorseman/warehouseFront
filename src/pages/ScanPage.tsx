@@ -2,8 +2,6 @@ import { useEffect, useState } from 'react';
 import { Card, Typography, Button, Space, message, Tag, Input } from 'antd';
 import { Html5QrcodeScanner } from 'html5-qrcode';
 import { api } from '../api/axios';
-import { useAuthStore } from '../store/authStore';
-import { useNavigate } from 'react-router-dom';
 
 interface Unit {
     id: number;
@@ -31,8 +29,6 @@ export default function ScanPage() {
     const [unit, setUnit] = useState<Unit | null>(null);
     const [loading, setLoading] = useState(false);
     const [manualCode, setManualCode] = useState('');
-    const logout = useAuthStore((state) => state.logout);
-    const navigate = useNavigate();
 
     // Инициализация сканера при монтировании
     useEffect(() => {
@@ -94,10 +90,7 @@ export default function ScanPage() {
     return (
         <div style={{ padding: 24, maxWidth: 600, margin: '0 auto' }}>
             <Space direction="vertical" size="large" style={{ width: '100%' }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                    <Typography.Title level={3} style={{ margin: 0 }}>Сканер QR</Typography.Title>
-                    <Button onClick={() => { logout(); navigate('/login'); }}>Выйти</Button>
-                </div>
+                <Typography.Title level={3} style={{ margin: 0 }}>Сканер QR</Typography.Title>
 
                 {/* Блок сканера */}
                 <Card title="Наведите камеру на QR-код">
