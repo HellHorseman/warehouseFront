@@ -14,16 +14,25 @@ interface BulkItem {
     name: string;
 }
 
+interface Box {
+    id: number;
+    code: string;
+    status: string;
+    name?: string;
+}
+
 interface InvoiceItem {
     key: string;
     type: 'UNIT' | 'BULK';
-    id: number; // ID юнита или мелкого
-    name: string; // Для отображения
+    id: number;
+    name: string;
     qty: number;
+    boxId?: number | null;
+    boxName?: string | null;
 }
 
 interface Props {
-    onSuccess: () => void; // Коллбэк, чтобы обновить список после создания
+    onSuccess: () => void;
     onCancel: () => void;
 }
 
@@ -31,19 +40,21 @@ export default function CreateInvoiceForm({ onSuccess, onCancel }: Props) {
     const [form] = Form.useForm();
     const [units, setUnits] = useState<Unit[]>([]);
     const [bulkItems, setBulkItems] = useState<BulkItem[]>([]);
+    const [boxes, setBoxes] = useState<Box[]>([]);
     const [items, setItems] = useState<InvoiceItem[]>([]);
     const [loading, setLoading] = useState(false);
 
-    // Загружаем доступное оборудование и мелкое при открытии
     useEffect(() => {
         const fetchData = async () => {
             try {
-                const [unitsRes, bulkRes] = await Promise.all([
+                const [unitsRes, bulkRes, boxesRes] = await Promise.all([
                     api.get('/units', { params: { status: 'warehouse' } }),
                     api.get('/bulk-items'),
+                    api.get('/boxes'),
                 ]);
                 setUnits(unitsRes.data);
                 setBulkItems(bulkRes.data);
+                setBoxes(boxesRes.data);
             } catch (error) {
                 message.error('Ошибка загрузки справочников');
             }
@@ -55,11 +66,13 @@ export default function CreateInvoiceForm({ onSuccess, onCancel }: Props) {
         const unit = units.find((u) => u.id === unitId);
         if (!unit) return;
 
-        // Проверяем, нет ли уже этого юнита в списке
         if (items.some((i) => i.type === 'UNIT' && i.id === unitId)) {
             message.warning('Это оборудование уже добавлено');
             return;
         }
+
+        const currentBoxId = form.getFieldValue('currentBoxId');
+        const currentBox = boxes.find(b => b.id === currentBoxId);
 
         setItems([
             ...items,
@@ -69,26 +82,33 @@ export default function CreateInvoiceForm({ onSuccess, onCancel }: Props) {
                 id: unitId,
                 name: `${unit.modelName} (${unit.serialNumber})`,
                 qty: 1,
+                boxId: currentBoxId || null,
+                boxName: currentBox ? `${currentBox.code}${currentBox.name ? ' - ' + currentBox.name : ''}` : null,
             },
         ]);
-        form.resetFields(['unitSelect']);
+        form.setFieldValue('unitSelect', undefined);
     };
 
     const addBulkItem = (bulkId: number, qty: number) => {
         const bulk = bulkItems.find((b) => b.id === bulkId);
         if (!bulk || !qty) return;
 
+        const currentBoxId = form.getFieldValue('currentBoxId');
+        const currentBox = boxes.find(b => b.id === currentBoxId);
+
         setItems([
             ...items,
             {
-                key: `bulk-${Date.now()}`, // Уникальный ключ для строки
+                key: `bulk-${Date.now()}`,
                 type: 'BULK',
                 id: bulkId,
                 name: bulk.name,
                 qty: qty,
+                boxId: currentBoxId || null,
+                boxName: currentBox ? `${currentBox.code}${currentBox.name ? ' - ' + currentBox.name : ''}` : null,
             },
         ]);
-        form.resetFields(['bulkSelect', 'bulkQty']);
+        form.setFieldsValue({ bulkSelect: undefined, bulkQty: undefined });
     };
 
     const removeItem = (key: string) => {
@@ -110,6 +130,7 @@ export default function CreateInvoiceForm({ onSuccess, onCancel }: Props) {
                 items: items.map((i) => ({
                     unitId: i.type === 'UNIT' ? i.id : null,
                     bulkItemId: i.type === 'BULK' ? i.id : null,
+                    boxId: i.boxId || null,
                     qtyPlanned: i.qty,
                 })),
             };
@@ -118,118 +139,90 @@ export default function CreateInvoiceForm({ onSuccess, onCancel }: Props) {
             message.success('Накладная создана!');
             onSuccess();
         } catch (error: any) {
-            if (error.response?.data?.message) {
-                message.error(error.response.data.message);
-            } else {
-                message.error('Ошибка создания накладной');
-            }
+            message.error(error.response?.data?.message || 'Ошибка создания накладной');
         } finally {
             setLoading(false);
         }
     };
 
     const columns = [
-        {
-            title: 'Тип',
-            dataIndex: 'type',
-            render: (type: string) => (type === 'UNIT' ? 'Серийное' : 'Мелкое'),
-        },
+        { title: 'Тип', dataIndex: 'type', render: (t: string) => (t === 'UNIT' ? 'QR' : 'Мелкое') },
         { title: 'Наименование', dataIndex: 'name' },
         { title: 'Кол-во', dataIndex: 'qty', width: 80 },
         {
+            title: 'Ящик',
+            dataIndex: 'boxName',
+            render: (val: string | null) => val || '—'
+        },
+        {
             title: '',
-            render: (_: any, record: InvoiceItem) => (
-                <Button
-                    type="text"
-                    danger
-                    icon={<DeleteOutlined />}
-                    onClick={() => removeItem(record.key)}
-                />
-            ),
             width: 50,
+            render: (_: any, record: InvoiceItem) => (
+                <Button type="text" danger icon={<DeleteOutlined />} onClick={() => removeItem(record.key)} />
+            ),
         },
     ];
 
     return (
         <div style={{ padding: '10px 0' }}>
             <Form form={form} layout="vertical">
-                {/* Верхний блок с заказчиком и ответственным */}
                 <div style={{ display: 'flex', gap: '16px' }}>
-                    <Form.Item
-                        name="customer"
-                        label={<span style={{ color: '#fff' }}>Заказчик</span>}
-                        rules={[{ required: true, message: 'Введите заказчика' }]}
-                        style={{ flex: 1 }}
-                    >
+                    <Form.Item name="customer" label={<span style={{ color: '#fff' }}>Заказчик</span>} rules={[{ required: true }]} style={{ flex: 1 }}>
                         <Input placeholder="ООО Ромашка" />
                     </Form.Item>
-                    <Form.Item
-                        name="responsible"
-                        label={<span style={{ color: '#fff' }}>Ответственный</span>}
-                        rules={[{ required: true, message: 'Введите ответственного' }]}
-                        style={{ flex: 1 }}
-                    >
+                    <Form.Item name="responsible" label={<span style={{ color: '#fff' }}>Ответственный</span>} rules={[{ required: true }]} style={{ flex: 1 }}>
                         <Input placeholder="Иванов И.И." />
                     </Form.Item>
                 </div>
-            </Form>
 
-            <Divider style={{ borderColor: '#333', margin: '12px 0' }} />
+                <Divider style={{ borderColor: '#333', margin: '12px 0' }} />
 
-            {/* Блок добавления оборудования */}
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '16px', marginBottom: '16px' }}>
-
-                {/* Добавление по QR */}
-                <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
-                    <span style={{ color: '#fff', width: '220px', display: 'inline-block' }}>Добавить оборудование с QR:</span>
+                <Form.Item name="currentBoxId" label={<span style={{ color: '#fff' }}>В какой ящик кладем? (необязательно)</span>}>
                     <Select
-                        showSearch
-                        placeholder="Выберите единицу"
-                        style={{ flex: 1 }}
-                        onChange={(val) => {
-                            addUnit(val);
-                        }}
-                        value={null} // Сбрасываем после выбора
-                        optionFilterProp="children"
-                        options={units.map((u) => ({
-                            value: u.id,
-                            label: `${u.modelName} (${u.serialNumber})`,
-                        }))}
+                        allowClear
+                        placeholder="Без ящика (само по себе)"
+                        options={boxes.map((b) => ({ value: b.id, label: `${b.code}${b.name ? ' - ' + b.name : ''}` }))}
+                        style={{ width: '100%', marginBottom: 16 }}
                     />
-                </div>
+                </Form.Item>
 
-                {/* Добавление мелкого */}
-                <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
-                    <span style={{ color: '#fff', width: '220px', display: 'inline-block' }}>Добавить мелкое (провода):</span>
-                    <Space.Compact style={{ flex: 1 }}>
-                        <Select
-                            placeholder="Выберите"
-                            style={{ width: '60%' }}
-                            onChange={(val) => form.setFieldValue('bulkSelect', val)}
-                            options={bulkItems.map((b) => ({ value: b.id, label: b.name }))}
-                        />
-                        <InputNumber
-                            min={1}
-                            placeholder="Кол-во"
-                            style={{ width: '25%' }}
-                            onChange={(val) => form.setFieldValue('bulkQty', val)}
-                        />
-                        <Button
-                            type="primary"
-                            style={{ width: '15%' }}
-                            onClick={() => {
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '16px', marginBottom: '16px' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
+                        <span style={{ color: '#fff', width: '220px' }}>Добавить оборудование с QR:</span>
+                        <Form.Item name="unitSelect" noStyle>
+                            <Select
+                                showSearch
+                                placeholder="Выберите единицу"
+                                style={{ flex: 1 }}
+                                onChange={(val) => addUnit(val)}
+                                value={null}
+                                optionFilterProp="children"
+                                options={units
+                                    .filter(u => !items.some(item => item.id === u.id && item.type === 'UNIT'))
+                                    .map((u) => ({ value: u.id, label: `${u.modelName} (${u.serialNumber})` }))}
+                            />
+                        </Form.Item>
+                    </div>
+
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
+                        <span style={{ color: '#fff', width: '220px' }}>Добавить мелкое (провода):</span>
+                        <Space.Compact style={{ flex: 1 }}>
+                            <Form.Item name="bulkSelect" noStyle>
+                                <Select placeholder="Выберите" style={{ width: '60%' }} options={bulkItems.map((b) => ({ value: b.id, label: b.name }))} />
+                            </Form.Item>
+                            <Form.Item name="bulkQty" noStyle>
+                                <InputNumber min={1} placeholder="Кол-во" style={{ width: '25%' }} />
+                            </Form.Item>
+                            <Button type="primary" style={{ width: '15%' }} onClick={() => {
                                 const bulkId = form.getFieldValue('bulkSelect');
                                 const qty = form.getFieldValue('bulkQty');
                                 if (bulkId && qty) addBulkItem(bulkId, qty);
-                            }}
-                        >
-                            +
-                        </Button>
-                    </Space.Compact>
+                            }}>+</Button>
+                        </Space.Compact>
+                    </div>
                 </div>
-            </div>
+            </Form>
 
-            {/* Таблица с добавленными позициями */}
             <Table
                 dataSource={items}
                 columns={columns as any}
@@ -239,12 +232,9 @@ export default function CreateInvoiceForm({ onSuccess, onCancel }: Props) {
                 locale={{ emptyText: <span style={{ color: '#888' }}>Добавьте позиции</span> }}
             />
 
-            {/* Кнопки снизу */}
             <div style={{ marginTop: 24, display: 'flex', justifyContent: 'flex-end', gap: 10 }}>
                 <Button onClick={onCancel}>Отмена</Button>
-                <Button type="primary" onClick={handleSubmit} loading={loading}>
-                    Создать накладную
-                </Button>
+                <Button type="primary" onClick={handleSubmit} loading={loading}>Создать накладную</Button>
             </div>
         </div>
     );

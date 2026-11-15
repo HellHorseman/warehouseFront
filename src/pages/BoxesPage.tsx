@@ -11,6 +11,7 @@ interface Box {
     status: string;
     maxCells: number | null;
     qrCode: string;
+    name?: string;
 }
 
 interface Unit {
@@ -104,6 +105,11 @@ export default function BoxesPage() {
 
     const columns: ColumnsType<Box> = [
         { title: 'ID', dataIndex: 'id', width: 70 },
+        {
+            title: 'Название',
+            dataIndex: 'name',
+            render: (val: string | null) => val || '—'
+        },
         { title: 'Код', dataIndex: 'code' },
         {
             title: 'Тип',
@@ -192,8 +198,8 @@ export default function BoxesPage() {
                     <Form.Item name="code" label={<span style={{ color: '#fff' }}>Код ящика</span>} rules={[{ required: true }]}>
                         <Input placeholder="BOX-001" />
                     </Form.Item>
-                    <Form.Item name="qrCode" label={<span style={{ color: '#fff' }}>QR-код (оставь пустым для автогенерации)</span>}>
-                        <Input placeholder="QR-BOX-001" />
+                    <Form.Item name="name" label={<span style={{ color: '#fff' }}>Название (например, "Ящик с проводами")</span>}>
+                        <Input placeholder="Введите название" />
                     </Form.Item>
                     <Form.Item name="type" label={<span style={{ color: '#fff' }}>Тип</span>} rules={[{ required: true }]}>
                         <Select placeholder="Выберите тип">
