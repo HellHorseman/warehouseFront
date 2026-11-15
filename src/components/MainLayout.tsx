@@ -4,7 +4,8 @@ import {
     DatabaseOutlined,
     FileTextOutlined,
     LogoutOutlined,
-    TeamOutlined
+    TeamOutlined,
+    InboxOutlined
 } from '@ant-design/icons';
 import { Outlet, useNavigate, useLocation } from 'react-router-dom';
 import { useAuthStore } from '../store/authStore';
@@ -26,6 +27,7 @@ export default function MainLayout() {
         { key: '/units', icon: <DatabaseOutlined />, label: 'Оборудование' },
         { key: '/invoices', icon: <FileTextOutlined />, label: 'Накладные' },
         { key: '/users', icon: <TeamOutlined />, label: 'Пользователи' },
+        { key: '/boxes', icon: <InboxOutlined />, label: 'Ящики' },
     ];
 
     return (

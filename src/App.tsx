@@ -7,6 +7,7 @@ import ProtectedRoute from './components/ProtectedRoute';
 import MainLayout from './components/MainLayout';
 import InvoiceDetailPage from './pages/InvoiceDetailPage';
 import UsersPage from './pages/UsersPage';
+import BoxesPage from './pages/BoxesPage';
 
 function App() {
     return (
@@ -21,6 +22,7 @@ function App() {
                     <Route path="/" element={<Navigate to="/scan" replace />} />
                     <Route path="/invoices/:id" element={<InvoiceDetailPage />} />
                     <Route path="/users" element={<UsersPage />} />
+                    <Route path="/boxes" element={<BoxesPage />} />
                 </Route>
             </Route>
         </Routes>
