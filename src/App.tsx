@@ -6,6 +6,7 @@ import InvoicesPage from './pages/InvoicesPage';
 import ProtectedRoute from './components/ProtectedRoute';
 import MainLayout from './components/MainLayout';
 import InvoiceDetailPage from './pages/InvoiceDetailPage';
+import UsersPage from './pages/UsersPage';
 
 function App() {
     return (
@@ -19,6 +20,7 @@ function App() {
                     <Route path="/invoices" element={<InvoicesPage />} />
                     <Route path="/" element={<Navigate to="/scan" replace />} />
                     <Route path="/invoices/:id" element={<InvoiceDetailPage />} />
+                    <Route path="/users" element={<UsersPage />} />
                 </Route>
             </Route>
         </Routes>
