@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Table, Tag, Input, Select, Space, Typography, message } from 'antd';
+import { Table, Tag, Input, Select, Space, Typography, message, Tabs } from 'antd';
 import type { ColumnsType } from 'antd/es/table';
 import { SearchOutlined } from '@ant-design/icons';
 import { api } from '../api/axios';
@@ -10,6 +10,12 @@ interface Unit {
     qrCode: string;
     status: string;
     modelName: string;
+}
+
+interface BulkItem {
+    id: number;
+    name: string;
+    qtyOnHand: number;
 }
 
 const statusColors: Record<string, string> = {
@@ -27,7 +33,8 @@ const statusLabels: Record<string, string> = {
 };
 
 export default function UnitsPage() {
-    const [data, setData] = useState<Unit[]>([]);
+    const [units, setUnits] = useState<Unit[]>([]);
+    const [bulkItems, setBulkItems] = useState<BulkItem[]>([]);
     const [loading, setLoading] = useState(false);
     const [statusFilter, setStatusFilter] = useState<string | undefined>(undefined);
     const [modelFilter, setModelFilter] = useState<string>('');
@@ -36,12 +43,9 @@ export default function UnitsPage() {
         setLoading(true);
         try {
             const response = await api.get('/units', {
-                params: {
-                    status: statusFilter,
-                    modelName: modelFilter || undefined,
-                },
+                params: { status: statusFilter, modelName: modelFilter || undefined },
             });
-            setData(response.data);
+            setUnits(response.data);
         } catch (error) {
             message.error('Не удалось загрузить список оборудования');
         } finally {
@@ -49,36 +53,32 @@ export default function UnitsPage() {
         }
     };
 
+    const fetchBulkItems = async () => {
+        try {
+            const response = await api.get('/bulk-items');
+            setBulkItems(response.data);
+        } catch (error) {
+            message.error('Не удалось загрузить мелкое оборудование');
+        }
+    };
+
     useEffect(() => {
         fetchUnits();
-    }, [statusFilter]); // Перезапрашиваем при смене статуса
+    }, [statusFilter]);
 
-    const columns: ColumnsType<Unit> = [
-        {
-            title: 'ID',
-            dataIndex: 'id',
-            key: 'id',
-            width: 70,
-        },
-        {
-            title: 'Модель',
-            dataIndex: 'modelName',
-            key: 'modelName',
-        },
-        {
-            title: 'Серийный номер',
-            dataIndex: 'serialNumber',
-            key: 'serialNumber',
-        },
-        {
-            title: 'QR-код',
-            dataIndex: 'qrCode',
-            key: 'qrCode',
-        },
+    useEffect(() => {
+        fetchBulkItems();
+    }, []);
+
+    // Колонки для серийного оборудования
+    const unitColumns: ColumnsType<Unit> = [
+        { title: 'ID', dataIndex: 'id', width: 70 },
+        { title: 'Модель', dataIndex: 'modelName' },
+        { title: 'Серийный номер', dataIndex: 'serialNumber' },
+        { title: 'QR-код', dataIndex: 'qrCode' },
         {
             title: 'Статус',
             dataIndex: 'status',
-            key: 'status',
             render: (status: string) => (
                 <Tag color={statusColors[status] || 'default'}>
                     {statusLabels[status] || status}
@@ -87,41 +87,77 @@ export default function UnitsPage() {
         },
     ];
 
+    // Колонки для мелкого оборудования
+    const bulkColumns: ColumnsType<BulkItem> = [
+        { title: 'ID', dataIndex: 'id', width: 70 },
+        { title: 'Наименование', dataIndex: 'name' },
+        {
+            title: 'Остаток на складе',
+            dataIndex: 'qtyOnHand',
+            render: (qty: number) => <strong>{qty} шт.</strong>
+        },
+    ];
+
     return (
         <Space direction="vertical" size="large" style={{ width: '100%' }}>
             <Typography.Title level={3} style={{ margin: 0 }}>Оборудование</Typography.Title>
 
-            <Space wrap>
-                <Input
-                    placeholder="Поиск по модели"
-                    prefix={<SearchOutlined />}
-                    value={modelFilter}
-                    onChange={(e) => setModelFilter(e.target.value)}
-                    onPressEnter={fetchUnits}
-                    style={{ width: 250 }}
-                />
-                <Select
-                    placeholder="Статус"
-                    allowClear
-                    style={{ width: 150 }}
-                    value={statusFilter}
-                    onChange={(value) => setStatusFilter(value)}
-                    options={[
-                        { value: 'warehouse', label: 'На складе' },
-                        { value: 'client', label: 'В аренде' },
-                        { value: 'service', label: 'В ремонте' },
-                        { value: 'written_off', label: 'Списан' },
-                    ]}
-                />
-            </Space>
-
-            <Table
-                columns={columns}
-                dataSource={data}
-                rowKey="id"
-                loading={loading}
-                pagination={{ pageSize: 20 }}
-                style={{ background: '#1A1A1A' }}
+            <Tabs
+                defaultActiveKey="1"
+                items={[
+                    {
+                        key: '1',
+                        label: 'Серийное (с QR)',
+                        children: (
+                            <>
+                                <Space wrap style={{ marginBottom: 16 }}>
+                                    <Input
+                                        placeholder="Поиск по модели"
+                                        prefix={<SearchOutlined />}
+                                        value={modelFilter}
+                                        onChange={(e) => setModelFilter(e.target.value)}
+                                        onPressEnter={fetchUnits}
+                                        style={{ width: 250 }}
+                                    />
+                                    <Select
+                                        placeholder="Статус"
+                                        allowClear
+                                        style={{ width: 150 }}
+                                        value={statusFilter}
+                                        onChange={(value) => setStatusFilter(value)}
+                                        options={[
+                                            { value: 'warehouse', label: 'На складе' },
+                                            { value: 'client', label: 'В аренде' },
+                                            { value: 'service', label: 'В ремонте' },
+                                            { value: 'written_off', label: 'Списан' },
+                                        ]}
+                                    />
+                                </Space>
+                                <Table
+                                    columns={unitColumns}
+                                    dataSource={units}
+                                    rowKey="id"
+                                    loading={loading}
+                                    pagination={{ pageSize: 20 }}
+                                    style={{ background: '#1A1A1A' }}
+                                />
+                            </>
+                        ),
+                    },
+                    {
+                        key: '2',
+                        label: 'Мелкое (без QR)',
+                        children: (
+                            <Table
+                                columns={bulkColumns}
+                                dataSource={bulkItems}
+                                rowKey="id"
+                                pagination={{ pageSize: 20 }}
+                                style={{ background: '#1A1A1A' }}
+                            />
+                        ),
+                    },
+                ]}
             />
         </Space>
     );

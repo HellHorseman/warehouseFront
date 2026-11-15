@@ -3,6 +3,8 @@ import { Table, Tag, Typography, Button, Space, message, Modal } from 'antd';
 import type { ColumnsType } from 'antd/es/table';
 import { PlusOutlined } from '@ant-design/icons';
 import { api } from '../api/axios';
+import CreateInvoiceForm from '../components/CreateInvoiceForm';
+import { useNavigate } from 'react-router-dom';
 
 interface Invoice {
     id: number;
@@ -30,6 +32,7 @@ export default function InvoicesPage() {
     const [data, setData] = useState<Invoice[]>([]);
     const [loading, setLoading] = useState(false);
     const [isModalOpen, setIsModalOpen] = useState(false);
+    const navigate = useNavigate();
 
     const fetchInvoices = async () => {
         setLoading(true);
@@ -98,18 +101,32 @@ export default function InvoicesPage() {
                 loading={loading}
                 pagination={{ pageSize: 15 }}
                 style={{ background: '#1A1A1A' }}
+                onRow={(record) => ({
+                    onClick: () => navigate(`/invoices/${record.id}`),
+                    style: { cursor: 'pointer' } // Меняем курсор на "руку"
+                })}
             />
 
             <Modal
-                title="Создание накладной"
+                title={<span style={{ color: '#fff' }}>Создание накладной</span>}
                 open={isModalOpen}
                 onCancel={() => setIsModalOpen(false)}
                 footer={null}
-                styles={{ body: { background: '#1A1A1A' }, header: { background: '#1A1A1A', color: '#fff' } }}
+                width={800} // Пошире для формы
+                styles={{
+                    header: { background: '#1A1A1A' },
+                    content: { background: '#1A1A1A' },
+                    body: { background: '#1A1A1A' }
+                }}
+                destroyOnClose // Чтобы форма сбрасывалась при закрытии
             >
-                <Typography.Text style={{ color: '#fff' }}>
-                    Здесь скоро будет форма создания накладной (выбор оборудования, ящиков и т.д.)
-                </Typography.Text>
+                <CreateInvoiceForm
+                    onSuccess={() => {
+                        setIsModalOpen(false);
+                        fetchInvoices(); // Обновляем список накладных
+                    }}
+                    onCancel={() => setIsModalOpen(false)}
+                />
             </Modal>
         </Space>
     );
