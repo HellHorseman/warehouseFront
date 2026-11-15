@@ -8,6 +8,12 @@ import MainLayout from './components/MainLayout';
 import InvoiceDetailPage from './pages/InvoiceDetailPage';
 import UsersPage from './pages/UsersPage';
 import BoxesPage from './pages/BoxesPage';
+import { useAuthStore } from './store/authStore';
+
+const AdminRoute = ({ children }: { children: JSX.Element }) => {
+    const getRole = useAuthStore((state) => state.getRole);
+    return getRole() === 'ADMIN' ? children : <Navigate to="/scan" replace />;
+};
 
 function App() {
     return (
@@ -21,7 +27,11 @@ function App() {
                     <Route path="/invoices" element={<InvoicesPage />} />
                     <Route path="/" element={<Navigate to="/scan" replace />} />
                     <Route path="/invoices/:id" element={<InvoiceDetailPage />} />
-                    <Route path="/users" element={<UsersPage />} />
+                    <Route path="/users" element={
+                        <AdminRoute>
+                            <UsersPage />
+                        </AdminRoute>
+                    } />
                     <Route path="/boxes" element={<BoxesPage />} />
                 </Route>
             </Route>

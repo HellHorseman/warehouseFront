@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
-import { Table, Tag, Typography, Space, message, Button, Modal, Descriptions } from 'antd';
+import { Table, Tag, Typography, Space, message, Button, Modal, Descriptions, Form, Input, InputNumber, Select } from 'antd';
 import type { ColumnsType } from 'antd/es/table';
+import { PlusOutlined } from '@ant-design/icons';
 import { api } from '../api/axios';
 
 interface Box {
@@ -9,6 +10,7 @@ interface Box {
     type: string;
     status: string;
     maxCells: number | null;
+    qrCode: string;
 }
 
 interface Unit {
@@ -43,8 +45,12 @@ const typeLabels: Record<string, string> = {
 export default function BoxesPage() {
     const [data, setData] = useState<Box[]>([]);
     const [loading, setLoading] = useState(false);
+
     const [selectedBox, setSelectedBox] = useState<BoxDetail | null>(null);
     const [isModalOpen, setIsModalOpen] = useState(false);
+
+    const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
+    const [form] = Form.useForm();
 
     const fetchBoxes = async () => {
         setLoading(true);
@@ -84,6 +90,18 @@ export default function BoxesPage() {
         }
     };
 
+    const handleCreateBox = async (values: any) => {
+        try {
+            await api.post('/boxes', values);
+            message.success('Ящик создан!');
+            setIsCreateModalOpen(false);
+            form.resetFields();
+            fetchBoxes();
+        } catch (error: any) {
+            message.error(error.response?.data?.message || 'Ошибка создания ящика');
+        }
+    };
+
     const columns: ColumnsType<Box> = [
         { title: 'ID', dataIndex: 'id', width: 70 },
         { title: 'Код', dataIndex: 'code' },
@@ -111,10 +129,16 @@ export default function BoxesPage() {
 
     return (
         <Space direction="vertical" size="large" style={{ width: '100%' }}>
-            <Typography.Title level={3} style={{ margin: 0 }}>Ящики</Typography.Title>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <Typography.Title level={3} style={{ margin: 0 }}>Ящики</Typography.Title>
+                <Button type="primary" icon={<PlusOutlined />} onClick={() => setIsCreateModalOpen(true)}>
+                    Создать ящик
+                </Button>
+            </div>
 
             <Table columns={columns} dataSource={data} rowKey="id" loading={loading} style={{ background: '#1A1A1A' }} />
 
+            {/* Модалка просмотра */}
             <Modal
                 title={<span style={{ color: '#fff' }}>Ящик: {selectedBox?.code}</span>}
                 open={isModalOpen}
@@ -138,7 +162,7 @@ export default function BoxesPage() {
                         </Descriptions>
 
                         <Typography.Title level={5} style={{ color: '#fff', marginTop: 16 }}>Содержимое:</Typography.Title>
-                        {selectedBox.units.length === 0 ? (
+                        {!selectedBox.units || selectedBox.units.length === 0 ? (
                             <Typography.Text style={{ color: '#888' }}>Пусто</Typography.Text>
                         ) : (
                             <Table
@@ -154,6 +178,38 @@ export default function BoxesPage() {
                         )}
                     </Space>
                 )}
+            </Modal>
+
+            {/* Модалка создания */}
+            <Modal
+                title={<span style={{ color: '#fff' }}>Создание ящика</span>}
+                open={isCreateModalOpen}
+                onCancel={() => setIsCreateModalOpen(false)}
+                footer={null}
+                styles={{ header: { background: '#1A1A1A' }, content: { background: '#1A1A1A' }, body: { background: '#1A1A1A' } }}
+            >
+                <Form form={form} layout="vertical" onFinish={handleCreateBox}>
+                    <Form.Item name="code" label={<span style={{ color: '#fff' }}>Код ящика</span>} rules={[{ required: true }]}>
+                        <Input placeholder="BOX-001" />
+                    </Form.Item>
+                    <Form.Item name="qrCode" label={<span style={{ color: '#fff' }}>QR-код (оставь пустым для автогенерации)</span>}>
+                        <Input placeholder="QR-BOX-001" />
+                    </Form.Item>
+                    <Form.Item name="type" label={<span style={{ color: '#fff' }}>Тип</span>} rules={[{ required: true }]}>
+                        <Select placeholder="Выберите тип">
+                            <Select.Option value="BULK_CONTAINER">Ящик под мелочь</Select.Option>
+                            <Select.Option value="STATIC_KIT">Статический комплект</Select.Option>
+                            <Select.Option value="FIXED_BAG">Сумка (фикс.)</Select.Option>
+                            <Select.Option value="FIXED_BAG_OPTIONAL">Сумка (с добором)</Select.Option>
+                        </Select>
+                    </Form.Item>
+                    <Form.Item name="maxCells" label={<span style={{ color: '#fff' }}>Макс. ячеек (только для сумок)</span>}>
+                        <InputNumber min={1} style={{ width: '100%' }} />
+                    </Form.Item>
+                    <Form.Item>
+                        <Button type="primary" htmlType="submit" block>Создать</Button>
+                    </Form.Item>
+                </Form>
             </Modal>
         </Space>
     );

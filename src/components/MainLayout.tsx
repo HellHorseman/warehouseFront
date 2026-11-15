@@ -16,6 +16,9 @@ export default function MainLayout() {
     const navigate = useNavigate();
     const location = useLocation();
     const logout = useAuthStore((state) => state.logout);
+    const getRole = useAuthStore((state) => state.getRole);
+
+    const role = getRole();
 
     const handleLogout = () => {
         logout();
@@ -26,9 +29,12 @@ export default function MainLayout() {
         { key: '/scan', icon: <ScanOutlined />, label: 'Сканер' },
         { key: '/units', icon: <DatabaseOutlined />, label: 'Оборудование' },
         { key: '/invoices', icon: <FileTextOutlined />, label: 'Накладные' },
-        { key: '/users', icon: <TeamOutlined />, label: 'Пользователи' },
         { key: '/boxes', icon: <InboxOutlined />, label: 'Ящики' },
     ];
+
+    if (role === 'ADMIN') {
+        menuItems.push({ key: '/users', icon: <TeamOutlined />, label: 'Пользователи' });
+    }
 
     return (
         <Layout style={{ minHeight: '100vh' }}>
