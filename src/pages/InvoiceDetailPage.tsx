@@ -56,6 +56,7 @@ export default function InvoiceDetailPage() {
     const [isReceiveModalOpen, setIsReceiveModalOpen] = useState(false);
     const [selectedUnits, setSelectedUnits] = useState<number[]>([]);
     const [scannedUnits, setScannedUnits] = useState<number[]>([]);
+    const [bulkReturns, setBulkReturns] = useState<Record<number, number>>({});
 
     const fetchInvoice = async () => {
         try {
@@ -99,7 +100,15 @@ export default function InvoiceDetailPage() {
         if (!invoice) return;
         const available = invoice.items.filter(i => i.unitId && i.qtyReturned === 0).map(i => i.unitId as number);
         setSelectedUnits(available);
-        setScannedUnits([]); // Сбрасываем сканированные
+        setScannedUnits([]);
+
+        // Инициализируем мелкое (по умолчанию 0)
+        const initialBulk: Record<number, number> = {};
+        invoice.items.filter(i => i.bulkItemId && i.qtyReturned < i.qtyShipped).forEach(i => {
+            initialBulk[i.bulkItemId as number] = 0;
+        });
+        setBulkReturns(initialBulk);
+
         setIsReceiveModalOpen(true);
     };
 
@@ -109,7 +118,8 @@ export default function InvoiceDetailPage() {
         try {
             await api.post(`/invoices/${id}/receive`, {
                 unitIds: selectedUnits,
-                scannedUnitIds: scannedUnits // Передаем на бэк
+                scannedUnitIds: scannedUnits,
+                bulkReturns: bulkReturns // Передаем количества
             });
             message.success('Приёмка выполнена!');
             setIsReceiveModalOpen(false);
@@ -212,6 +222,16 @@ export default function InvoiceDetailPage() {
                 return qty;
             }
         },
+        ...(!isDraft ? [{
+            title: 'Возвращено',
+            width: 120,
+            render: (_: any, r: InvoiceItem) => {
+                if (r.bulkItemId) {
+                    return <Tag color={r.qtyReturned >= r.qtyShipped ? 'green' : 'orange'}>{r.qtyReturned} / {r.qtyShipped}</Tag>;
+                }
+                return <Tag color={r.qtyReturned > 0 ? 'green' : 'default'}>{r.qtyReturned > 0 ? 'Принято' : 'Не принято'}</Tag>;
+            }
+        }] : []),
         ...(isDraft ? [
             {
                 title: 'Ящик', width: 250,
@@ -367,6 +387,29 @@ export default function InvoiceDetailPage() {
 
                 {receiveItems.length === 0 && (
                     <Typography.Text style={{ color: '#888' }}>Все единицы с QR уже приняты.</Typography.Text>
+                )}
+                {invoice.items.filter(i => i.bulkItemId && i.qtyReturned < i.qtyShipped).length > 0 && (
+                    <div style={{ marginTop: 24 }}>
+                        <Typography.Title level={5} style={{ color: '#fff' }}>Мелкое оборудование (провода)</Typography.Title>
+                        {invoice.items
+                            .filter(i => i.bulkItemId && i.qtyReturned < i.qtyShipped)
+                            .map(item => {
+                                const maxReturn = item.qtyShipped - item.qtyReturned;
+                                return (
+                                    <div key={item.id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
+                                        <span style={{ color: '#fff' }}>{item.bulkItemName} (Отгружено: {maxReturn} шт.)</span>
+                                        <InputNumber
+                                            min={0}
+                                            max={maxReturn}
+                                            value={bulkReturns[item.bulkItemId as number] || 0}
+                                            onChange={(val) => setBulkReturns({ ...bulkReturns, [item.bulkItemId as number]: val || 0 })}
+                                            style={{ width: 100 }}
+                                        />
+                                    </div>
+                                );
+                            })
+                        }
+                    </div>
                 )}
             </Modal>
         </Space>
