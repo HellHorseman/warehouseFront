@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
-import { Table, Tag, Typography, Button, Space, message, Modal } from 'antd';
+import {Table, Tag, Typography, Button, Space, message, Modal, Popconfirm} from 'antd';
 import type { ColumnsType } from 'antd/es/table';
-import { PlusOutlined } from '@ant-design/icons';
+import {DeleteOutlined, PlusOutlined} from '@ant-design/icons';
 import { api } from '../api/axios';
 import CreateInvoiceForm from '../components/CreateInvoiceForm';
 import { useNavigate } from 'react-router-dom';
@@ -50,6 +50,16 @@ export default function InvoicesPage() {
         fetchInvoices();
     }, []);
 
+    const handleDeleteInvoice = async (id: number) => {
+        try {
+            await api.delete(`/invoices/${id}`);
+            message.success('Накладная удалена');
+            fetchInvoices(); // Обновляем список
+        } catch (error: any) {
+            message.error(error.response?.data?.message || 'Ошибка удаления');
+        }
+    };
+
     const columns: ColumnsType<Invoice> = [
         {
             title: '№',
@@ -83,6 +93,27 @@ export default function InvoicesPage() {
                 </Tag>
             ),
         },
+        {
+            title: '',
+            width: 60,
+            render: (_, record) => {
+                if (record.status === 'draft') {
+                    return (
+                        <div onClick={(e) => e.stopPropagation()}> {/* <-- ВОТ ЭТО */}
+                            <Popconfirm
+                                title="Удалить черновик?"
+                                onConfirm={() => handleDeleteInvoice(record.id)}
+                                okText="Да"
+                                cancelText="Нет"
+                            >
+                                <Button type="text" danger icon={<DeleteOutlined />} />
+                            </Popconfirm>
+                        </div>
+                    );
+                }
+                return null;
+            }
+        }
     ];
 
     return (

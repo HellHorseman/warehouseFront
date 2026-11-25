@@ -16,10 +16,12 @@ api.interceptors.request.use((config) => {
 api.interceptors.response.use(
     (response) => response,
     (error) => {
-        if (error.response?.status === 401 || error.response?.status === 403) {
+        // Выкидываем на логин ТОЛЬКО если токен протух (401)
+        if (error.response?.status === 401) {
             useAuthStore.getState().logout();
             window.location.href = '/login';
         }
+        // Если 403 или 500 — просто отдаем ошибку дальше, чтобы компонент показал message.error
         return Promise.reject(error);
     }
 );

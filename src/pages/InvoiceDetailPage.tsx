@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { Card, Descriptions, Table, Tag, Button, Space, Typography, message, Popconfirm, InputNumber, Modal, Select, Form } from 'antd';
+import { Card, Descriptions, Tag, Button, Space, Typography, message, Popconfirm, InputNumber, Modal, Select, Form, Collapse, Table } from 'antd';
 import { ArrowLeftOutlined, DeleteOutlined, PlusOutlined } from '@ant-design/icons';
 import { api } from '../api/axios';
 
@@ -26,6 +26,13 @@ interface Invoice {
     items: InvoiceItem[];
 }
 
+interface Box {
+    id: number;
+    code: string;
+    name?: string;
+    status: string;
+}
+
 interface Unit { id: number; serialNumber: string; modelName: string; }
 interface BulkItem { id: number; name: string; }
 
@@ -36,6 +43,7 @@ export default function InvoiceDetailPage() {
     const { id } = useParams<{ id: string }>();
     const navigate = useNavigate();
     const [invoice, setInvoice] = useState<Invoice | null>(null);
+    const [boxes, setBoxes] = useState<Box[]>([]);
 
     const [isModalOpen, setIsModalOpen] = useState(false);
     const [units, setUnits] = useState<Unit[]>([]);
@@ -52,8 +60,18 @@ export default function InvoiceDetailPage() {
         }
     };
 
+    const fetchBoxes = async () => {
+        try {
+            const response = await api.get('/boxes');
+            setBoxes(response.data);
+        } catch (error) {
+            console.error(error);
+        }
+    };
+
     useEffect(() => {
         fetchInvoice();
+        fetchBoxes();
         Promise.all([api.get('/units?status=warehouse'), api.get('/bulk-items')])
             .then(([unitsRes, bulkRes]) => { setUnits(unitsRes.data); setBulkItems(bulkRes.data); })
             .catch(() => message.error('Ошибка загрузки справочников'));
@@ -101,6 +119,12 @@ export default function InvoiceDetailPage() {
     };
 
     const handleAddItem = async (values: any) => {
+        // Проверка на дубликат: если unitId уже есть в invoice.items — не даем добавить
+        if (values.unitId && invoice?.items.some(i => i.unitId === values.unitId)) {
+            message.error('Это оборудование уже добавлено в накладную');
+            return;
+        }
+
         try {
             await api.post(`/invoices/${id}/items`, values);
             message.success('Позиция добавлена');
@@ -111,15 +135,39 @@ export default function InvoiceDetailPage() {
         }
     };
 
+    // Функция привязки ящика
+    const handleAssignBox = async (itemId: number, boxId: number | null) => {
+        try {
+            await api.patch(`/invoices/${id}/items/${itemId}/box`, null, { params: { boxId } });
+            fetchInvoice();
+        } catch (error: any) {
+            message.error(error.response?.data?.message || 'Ошибка привязки ящика');
+        }
+    };
+
     if (!invoice) return <div style={{ color: '#fff' }}>Загрузка...</div>;
     const isDraft = invoice.status === 'draft';
 
-    const columns = [
-        { title: 'ID', dataIndex: 'id', width: 60 },
+    // Группировка данных для аккордеона
+    const unassignedItems = invoice.items.filter(i => !i.boxId);
+    const itemsByBox = invoice.items.reduce((acc, item) => {
+        if (item.boxId) {
+            if (!acc[item.boxId]) acc[item.boxId] = [];
+            acc[item.boxId].push(item);
+        }
+        return acc;
+    }, {} as Record<number, InvoiceItem[]>);
+
+    // Опции для выбора ящиков (только свободные)
+    const boxOptions = boxes
+        .filter(b => b.status === 'on_stock')
+        .map(b => ({ value: b.id, label: `${b.code}${b.name ? ' - ' + b.name : ''}` }));
+
+    // Колонки для таблицы внутри аккордеона
+    const itemColumns = [
         { title: 'Наименование', render: (_: any, r: InvoiceItem) => r.unitName || r.bulkItemName || 'Неизвестно' },
-        { title: 'Ящик', dataIndex: 'boxName', width: 150, render: (val: string) => val || '—' },
         {
-            title: 'План', dataIndex: 'qtyPlanned', width: 120,
+            title: 'Кол-во', dataIndex: 'qtyPlanned', width: 100,
             render: (qty: number, r: InvoiceItem) => {
                 if (isDraft && r.bulkItemId) {
                     return <InputNumber min={1} defaultValue={qty} onBlur={(e) => { const val = parseInt(e.target.value); if (val && val !== qty) handleQtyChange(r.id, val); }} size="small" />;
@@ -127,13 +175,67 @@ export default function InvoiceDetailPage() {
                 return qty;
             }
         },
-        { title: 'Отгружено', dataIndex: 'qtyShipped', width: 100 },
-        { title: 'Возвращено', dataIndex: 'qtyReturned', width: 100 },
-        ...(isDraft ? [{ title: '', width: 60, render: (_: any, r: InvoiceItem) => (
-                <Popconfirm title="Удалить?" onConfirm={() => handleDeleteItem(r.id)} okText="Да" cancelText="Нет">
-                    <Button type="text" danger icon={<DeleteOutlined />} />
-                </Popconfirm>
-            )}] : [])
+        ...(isDraft ? [
+            {
+                title: 'Ящик', width: 250,
+                render: (_: any, r: InvoiceItem) => (
+                    <Select
+                        size="small"
+                        style={{ width: '100%' }}
+                        placeholder="Без ящика"
+                        allowClear
+                        value={r.boxId || undefined}
+                        onChange={(val) => handleAssignBox(r.id, val || null)}
+                        options={boxOptions}
+                    />
+                )
+            },
+            {
+                title: '', width: 50,
+                render: (_: any, r: InvoiceItem) => (
+                    <Popconfirm title="Удалить?" onConfirm={() => handleDeleteItem(r.id)} okText="Да" cancelText="Нет">
+                        <Button type="text" danger icon={<DeleteOutlined />} />
+                    </Popconfirm>
+                )
+            }
+        ] : [])
+    ];
+
+    // Формируем элементы аккордеона
+    const collapseItems = [
+        {
+            key: 'unassigned',
+            label: <span style={{ color: '#fff', fontWeight: 'bold' }}>Без ящика / Ожидают распределения ({unassignedItems.length})</span>,
+            children: (
+                <Table
+                    dataSource={unassignedItems}
+                    columns={itemColumns}
+                    rowKey="id"
+                    pagination={false}
+                    size="small"
+                    style={{ background: '#1A1A1A' }}
+                    locale={{ emptyText: <span style={{ color: '#888' }}>Все позиции распределены</span> }}
+                />
+            )
+        },
+        ...Object.entries(itemsByBox).map(([boxIdStr, items]) => {
+            const boxId = Number(boxIdStr);
+            const box = boxes.find(b => b.id === boxId);
+            return {
+                key: boxIdStr,
+                label: <span style={{ color: '#fff', fontWeight: 'bold' }}>Ящик: {box ? `${box.code} ${box.name || ''}` : `ID ${boxId}`} ({items.length} поз.)</span>,
+                children: (
+                    <Table
+                        dataSource={items}
+                        columns={itemColumns}
+                        rowKey="id"
+                        pagination={false}
+                        size="small"
+                        style={{ background: '#1A1A1A' }}
+                    />
+                )
+            };
+        })
     ];
 
     return (
@@ -155,11 +257,11 @@ export default function InvoiceDetailPage() {
             </Card>
 
             <Card title="Позиции" style={{ background: '#1A1A1A', border: 'none' }} extra={isDraft && <Button type="primary" icon={<PlusOutlined />} onClick={() => setIsModalOpen(true)}>Добавить</Button>}>
-                <Table dataSource={invoice.items} columns={columns as any} rowKey="id" pagination={false} size="small" />
+                <Collapse items={collapseItems} style={{ background: '#111', borderColor: '#333' }} />
             </Card>
 
             <Space>
-                {isDraft && <Popconfirm title="Отгрузить?" onConfirm={handleShip} okText="Да" cancelText="Нет"><Button type="primary" size="large">Отгрузить со склада</Button></Popconfirm>}
+                {isDraft && <Popconfirm title="Отгрузить накладную?" onConfirm={handleShip} okText="Да" cancelText="Нет"><Button type="primary" size="large">Отгрузить со склада</Button></Popconfirm>}
                 {(invoice.status === 'shipped' || invoice.status === 'partially_returned') && (
                     <Popconfirm title="Принять?" onConfirm={handleReceive} okText="Да" cancelText="Нет"><Button type="primary" size="large" style={{ background: '#52c41a' }}>Принять на склад</Button></Popconfirm>
                 )}
@@ -168,7 +270,14 @@ export default function InvoiceDetailPage() {
             <Modal title={<span style={{ color: '#fff' }}>Добавить позицию</span>} open={isModalOpen} onCancel={() => setIsModalOpen(false)} footer={null} styles={{ header: { background: '#1A1A1A' }, content: { background: '#1A1A1A' }, body: { background: '#1A1A1A' } }}>
                 <Form form={form} onFinish={handleAddItem} layout="vertical">
                     <Form.Item name="unitId" label={<span style={{ color: '#fff' }}>Оборудование с QR</span>}>
-                        <Select allowClear placeholder="Выберите" options={units.map(u => ({ value: u.id, label: `${u.modelName} (${u.serialNumber})` }))} />
+                        <Select
+                            allowClear
+                            placeholder="Выберите"
+                            options={units
+                                .filter(u => !invoice.items.some(i => i.unitId === u.id)) // <-- Фильтр
+                                .map(u => ({ value: u.id, label: `${u.modelName} (${u.serialNumber})` }))
+                            }
+                        />
                     </Form.Item>
                     <Form.Item name="bulkItemId" label={<span style={{ color: '#fff' }}>Мелкое</span>}>
                         <Select allowClear placeholder="Выберите" options={bulkItems.map(b => ({ value: b.id, label: b.name }))} />
