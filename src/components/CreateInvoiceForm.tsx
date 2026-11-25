@@ -126,7 +126,6 @@ export default function CreateInvoiceForm({ onSuccess, onCancel }: Props) {
             setLoading(true);
             const payload = {
                 customer: values.customer,
-                responsible: values.responsible,
                 items: items.map((i) => ({
                     unitId: i.type === 'UNIT' ? i.id : null,
                     bulkItemId: i.type === 'BULK' ? i.id : null,
@@ -169,9 +168,6 @@ export default function CreateInvoiceForm({ onSuccess, onCancel }: Props) {
                 <div style={{ display: 'flex', gap: '16px' }}>
                     <Form.Item name="customer" label={<span style={{ color: '#fff' }}>Заказчик</span>} rules={[{ required: true }]} style={{ flex: 1 }}>
                         <Input placeholder="ООО Ромашка" />
-                    </Form.Item>
-                    <Form.Item name="responsible" label={<span style={{ color: '#fff' }}>Ответственный</span>} rules={[{ required: true }]} style={{ flex: 1 }}>
-                        <Input placeholder="Иванов И.И." />
                     </Form.Item>
                 </div>
 

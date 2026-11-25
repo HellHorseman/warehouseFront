@@ -23,6 +23,8 @@ interface Invoice {
     responsible: string;
     status: string;
     createdAt: string;
+    shippedBy?: string;
+    creatorName?: string;
     items: InvoiceItem[];
 }
 
@@ -79,7 +81,7 @@ export default function InvoiceDetailPage() {
 
     const handleShip = async () => {
         try {
-            await api.post(`/invoices/${id}/ship`, { shippedBy: 'Админ' });
+            await api.post(`/invoices/${id}/ship`, {});
             message.success('Накладная отгружена!');
             fetchInvoice();
         } catch (error: any) {
@@ -251,8 +253,9 @@ export default function InvoiceDetailPage() {
             <Card title="Информация" style={{ background: '#1A1A1A', border: 'none' }}>
                 <Descriptions column={2} styles={{ label: { color: '#9CA3AF' }, content: { color: '#fff' } }}>
                     <Descriptions.Item label="Заказчик">{invoice.customer}</Descriptions.Item>
-                    <Descriptions.Item label="Ответственный">{invoice.responsible}</Descriptions.Item>
+                    <Descriptions.Item label="Ответственный (Составитель)">{invoice.responsible}</Descriptions.Item>
                     <Descriptions.Item label="Дата">{new Date(invoice.createdAt).toLocaleString('ru-RU')}</Descriptions.Item>
+                    <Descriptions.Item label="Отгрузил">{invoice.shippedBy || '—'}</Descriptions.Item>
                 </Descriptions>
             </Card>
 
