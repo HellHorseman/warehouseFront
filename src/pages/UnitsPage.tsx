@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Table, Tag, Input, Select, Space, Typography, message, Tabs } from 'antd';
+import {Table, Tag, Input, Select, Space, Typography, message, Tabs, Button} from 'antd';
 import type { ColumnsType } from 'antd/es/table';
 import { SearchOutlined } from '@ant-design/icons';
 import { api } from '../api/axios';
@@ -70,6 +70,61 @@ export default function UnitsPage() {
         fetchBulkItems();
     }, []);
 
+    const handlePrintQr = async (id: number, code: string) => {
+        const token = JSON.parse(localStorage.getItem('auth-storage') || '{}').state?.token;
+        if (!token) {
+            message.error('Нет токена авторизации');
+            return;
+        }
+
+        try {
+            // 1. Скачиваем картинку с правильным заголовком авторизации
+            const response = await fetch(`http://localhost:8080/api/units/${id}/qr`, {
+                headers: {
+                    'Authorization': `Bearer ${token}`
+                }
+            });
+
+            if (!response.ok) throw new Error('Ошибка загрузки QR');
+
+            const blob = await response.blob();
+            const imageUrl = URL.createObjectURL(blob);
+
+            // 2. Открываем окно печати
+            const printWindow = window.open('', '_blank');
+            if (!printWindow) {
+                message.error('Браузер заблокировал окно печати. Разрешите всплывающие окна.');
+                return;
+            }
+
+            printWindow.document.write(`
+            <html>
+                <head><title>Печать QR: ${code}</title></head>
+                <body style="text-align: center; font-family: sans-serif; margin-top: 50px;">
+                    <h2>${code}</h2>
+                    <img src="${imageUrl}" style="width: 300px; height: 300px; border: 1px solid #000;" />
+                    <script>
+                        // Ждем загрузки картинки и только потом печатаем
+                        const img = document.querySelector('img');
+                        img.onload = () => {
+                            window.print();
+                            window.close();
+                        };
+                    </script>
+                </body>
+            </html>
+        `);
+            printWindow.document.close();
+
+            // Освобождаем память после закрытия окна (опционально)
+            // setTimeout(() => URL.revokeObjectURL(imageUrl), 10000);
+
+        } catch (error) {
+            message.error('Не удалось загрузить QR для печати');
+            console.error(error);
+        }
+    };
+
     // Колонки для серийного оборудования
     const unitColumns: ColumnsType<Unit> = [
         { title: 'ID', dataIndex: 'id', width: 70 },
@@ -85,6 +140,15 @@ export default function UnitsPage() {
                 </Tag>
             ),
         },
+        {
+            title: 'QR',
+            width: 80,
+            render: (_, record) => (
+                <Button size="small" onClick={() => handlePrintQr(record.id, record.serialNumber)}>
+                    Печать
+                </Button>
+            )
+        }
     ];
 
     // Колонки для мелкого оборудования
