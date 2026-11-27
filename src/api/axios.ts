@@ -1,8 +1,11 @@
 import axios from 'axios';
 import { useAuthStore } from '../store/authStore';
 
+const host = window.location.hostname; // Получаем IP или localhost, с которого открыта страница
+const port = '8080';
+
 export const api = axios.create({
-    baseURL: 'http://localhost:8080/api', // URL твоего бэкенда
+    baseURL: `http://${host}:${port}/api`,
 });
 
 api.interceptors.request.use((config) => {

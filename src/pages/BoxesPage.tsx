@@ -103,58 +103,70 @@ export default function BoxesPage() {
         }
     };
 
-    const handlePrintQr = async (id: number, code: string) => {
+    const handlePrintQr = async (id: number, code: string, sizeInMm: number) => {
         const token = JSON.parse(localStorage.getItem('auth-storage') || '{}').state?.token;
-        if (!token) {
-            message.error('Нет токена авторизации');
-            return;
-        }
+        if (!token) return;
+
+        // Генерируем картинку высокого разрешения (чтобы не было пикселей)
+        const pxSize = 300;
 
         try {
-            // 1. Скачиваем картинку с правильным заголовком авторизации
-            const response = await fetch(`http://localhost:8080/api/units/${id}/qr`, {
-                headers: {
-                    'Authorization': `Bearer ${token}`
-                }
+            const response = await fetch(`http://localhost:8080/api/units/${id}/qr?width=${pxSize}&height=${pxSize}`, {
+                headers: { 'Authorization': `Bearer ${token}` }
             });
-
-            if (!response.ok) throw new Error('Ошибка загрузки QR');
-
             const blob = await response.blob();
             const imageUrl = URL.createObjectURL(blob);
 
-            // 2. Открываем окно печати
             const printWindow = window.open('', '_blank');
-            if (!printWindow) {
-                message.error('Браузер заблокировал окно печати. Разрешите всплывающие окна.');
-                return;
-            }
+            if (!printWindow) return;
 
             printWindow.document.write(`
             <html>
-                <head><title>Печать QR: ${code}</title></head>
-                <body style="text-align: center; font-family: sans-serif; margin-top: 50px;">
-                    <h2>${code}</h2>
-                    <img src="${imageUrl}" style="width: 300px; height: 300px; border: 1px solid #000;" />
+                <head>
+                    <title>Печать QR: ${code}</title>
+                    <style>
+                        @page { 
+                            size: ${sizeInMm}mm ${sizeInMm}mm; /* Размер этикетки */
+                            margin: 0; 
+                        }
+                        body { 
+                            margin: 0; 
+                            padding: 0; 
+                            display: flex; 
+                            flex-direction: column;
+                            align-items: center; 
+                            justify-content: center;
+                            width: ${sizeInMm}mm;
+                            height: ${sizeInMm}mm;
+                        }
+                        img { 
+                            width: 100%; 
+                            height: auto; 
+                            max-height: 80%; /* Оставляем место для текста */
+                            object-fit: contain;
+                        }
+                        .label { 
+                            font-size: 8px; 
+                            font-weight: bold; 
+                            margin-top: 1mm;
+                            text-align: center;
+                            width: 100%;
+                        }
+                    </style>
+                </head>
+                <body>
+                    <img src="${imageUrl}" />
+                    <div class="label">${code}</div>
                     <script>
-                        // Ждем загрузки картинки и только потом печатаем
                         const img = document.querySelector('img');
-                        img.onload = () => {
-                            window.print();
-                            window.close();
-                        };
+                        img.onload = () => { window.print(); window.close(); };
                     </script>
                 </body>
             </html>
         `);
             printWindow.document.close();
-
-            // Освобождаем память после закрытия окна (опционально)
-            // setTimeout(() => URL.revokeObjectURL(imageUrl), 10000);
-
         } catch (error) {
-            message.error('Не удалось загрузить QR для печати');
-            console.error(error);
+            message.error('Ошибка печати');
         }
     };
 
@@ -188,11 +200,16 @@ export default function BoxesPage() {
         },
         {
             title: 'QR',
-            width: 80,
+            width: 120,
             render: (_, record) => (
-                <Button size="small" onClick={() => handlePrintQr(record.id, record.serialNumber)}>
-                    Печать
-                </Button>
+                <Space>
+                    <Button size="small" onClick={() => handlePrintQr(record.id, record.serialNumber, 55)}>
+                        Стандарт
+                    </Button>
+                    <Button size="small" onClick={() => handlePrintQr(record.id, record.serialNumber, 30)}>
+                        3x1.5
+                    </Button>
+                </Space>
             )
         }
     ];

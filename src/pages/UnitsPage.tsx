@@ -70,58 +70,57 @@ export default function UnitsPage() {
         fetchBulkItems();
     }, []);
 
-    const handlePrintQr = async (id: number, code: string) => {
+    const handlePrintQr = async (id: number, code: string, sizeInMm?: number) => {
         const token = JSON.parse(localStorage.getItem('auth-storage') || '{}').state?.token;
-        if (!token) {
-            message.error('Нет токена авторизации');
-            return;
-        }
+        if (!token) return;
+
+        // Если размер не передан, используем 55мм (стандарт)
+        const targetSize = sizeInMm || 55;
+        // Переводим мм в пиксели для генерации (примерно 4 пикселя на мм)
+        const pxSize = targetSize * 4;
 
         try {
-            // 1. Скачиваем картинку с правильным заголовком авторизации
-            const response = await fetch(`http://localhost:8080/api/units/${id}/qr`, {
-                headers: {
-                    'Authorization': `Bearer ${token}`
-                }
+            const response = await fetch(`http://localhost:8080/api/units/${id}/qr?width=${pxSize}&height=${pxSize}`, {
+                headers: { 'Authorization': `Bearer ${token}` }
             });
-
-            if (!response.ok) throw new Error('Ошибка загрузки QR');
-
             const blob = await response.blob();
             const imageUrl = URL.createObjectURL(blob);
 
-            // 2. Открываем окно печати
             const printWindow = window.open('', '_blank');
-            if (!printWindow) {
-                message.error('Браузер заблокировал окно печати. Разрешите всплывающие окна.');
-                return;
-            }
+            if (!printWindow) return;
 
+            // Формируем HTML с размерами в мм для CSS
             printWindow.document.write(`
             <html>
-                <head><title>Печать QR: ${code}</title></head>
-                <body style="text-align: center; font-family: sans-serif; margin-top: 50px;">
-                    <h2>${code}</h2>
-                    <img src="${imageUrl}" style="width: 300px; height: 300px; border: 1px solid #000;" />
+                <head>
+                    <title>Печать QR: ${code}</title>
+                    <style>
+                        @page { margin: 0; } /* Убираем поля для термопринтера */
+                        body { text-align: center; font-family: sans-serif; margin: 0; padding: 5mm; }
+                        .qr-container { 
+                            width: ${targetSize}mm; 
+                            height: ${targetSize}mm; 
+                            margin: 0 auto;
+                        }
+                        .qr-container img { width: 100%; height: 100%; }
+                        .label { font-size: ${targetSize > 40 ? '14px' : '10px'}; margin-top: 2mm; font-weight: bold; }
+                    </style>
+                </head>
+                <body>
+                    <div class="qr-container">
+                        <img src="${imageUrl}" />
+                    </div>
+                    <div class="label">${code}</div>
                     <script>
-                        // Ждем загрузки картинки и только потом печатаем
                         const img = document.querySelector('img');
-                        img.onload = () => {
-                            window.print();
-                            window.close();
-                        };
+                        img.onload = () => { window.print(); window.close(); };
                     </script>
                 </body>
             </html>
         `);
             printWindow.document.close();
-
-            // Освобождаем память после закрытия окна (опционально)
-            // setTimeout(() => URL.revokeObjectURL(imageUrl), 10000);
-
         } catch (error) {
-            message.error('Не удалось загрузить QR для печати');
-            console.error(error);
+            message.error('Ошибка печати');
         }
     };
 
@@ -142,11 +141,16 @@ export default function UnitsPage() {
         },
         {
             title: 'QR',
-            width: 80,
+            width: 120,
             render: (_, record) => (
-                <Button size="small" onClick={() => handlePrintQr(record.id, record.serialNumber)}>
-                    Печать
-                </Button>
+                <Space>
+                    <Button size="small" onClick={() => handlePrintQr(record.id, record.serialNumber, 55)}>
+                        Стандарт
+                    </Button>
+                    <Button size="small" onClick={() => handlePrintQr(record.id, record.serialNumber, 30)}>
+                        3x1.5
+                    </Button>
+                </Space>
             )
         }
     ];
