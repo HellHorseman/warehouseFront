@@ -1,5 +1,5 @@
-import { useEffect, useState } from 'react';
-import { Card, Typography, Button, Space, message, Tag, Input } from 'antd';
+import { useEffect, useState, useRef } from 'react';
+import { Card, Typography, Button, Space, message, Tag, Input, Select } from 'antd';
 import { Html5QrcodeScanner } from 'html5-qrcode';
 import { api } from '../api/axios';
 
@@ -30,40 +30,83 @@ export default function ScanPage() {
     const [loading, setLoading] = useState(false);
     const [manualCode, setManualCode] = useState('');
 
-    // Инициализация сканера при монтировании
-    useEffect(() => {
-        const scanner = new Html5QrcodeScanner(
-            "reader",
-            { fps: 10, qrbox: { width: 250, height: 250 } },
-            false
-        );
+    const [invoices, setInvoices] = useState<any[]>([]);
+    const [selectedInvoiceId, setSelectedInvoiceId] = useState<number | null>(null);
 
-        scanner.render(
-            (decodedText) => {
-                scanner.clear(); // Останавливаем сканер после успешного скана
-                handleScan(decodedText);
-            },
-            (error) => {
-                // Ошибки сканирования игнорируем, чтобы не засорять консоль
+    // Используем useRef, чтобы сканер не перезапускался при каждом рендере
+    const scannerRef = useRef<Html5QrcodeScanner | null>(null);
+
+    // Загрузка накладных (один раз при монтировании)
+    useEffect(() => {
+        const fetchInvoices = async () => {
+            try {
+                const res = await api.get('/invoices');
+                const available = res.data.filter((i: any) =>
+                    i.status === 'draft' || i.status === 'shipped' || i.status === 'partially_returned'
+                );
+                setInvoices(available);
+            } catch (e) {
+                console.error('Ошибка загрузки накладных', e);
+                message.error('Не удалось загрузить накладные');
             }
-        );
+        };
+        fetchInvoices();
+    }, []);
+
+    // Инициализация сканера
+    useEffect(() => {
+        const timer = setTimeout(() => {
+            const readerElement = document.getElementById("reader");
+            if (!readerElement) return;
+
+            // На всякий случай очищаем, но теперь React не должен сюда лезть
+            readerElement.innerHTML = "";
+
+            const scanner = new Html5QrcodeScanner(
+                "reader",
+                { fps: 10, qrbox: { width: 250, height: 250 } },
+                false
+            );
+
+            scanner.render(
+                (decodedText) => {
+                    // Безопасная остановка
+                    if (scannerRef.current) {
+                        scannerRef.current.clear().catch(e => console.warn("Clear error", e));
+                    }
+                    handleScan(decodedText);
+                },
+                () => { /* ignore */ }
+            );
+
+            scannerRef.current = scanner;
+        }, 100);
 
         return () => {
-            scanner.clear().catch((e) => console.error("Ошибка очистки сканера", e));
+            clearTimeout(timer);
+            // Безопасная очистка при размонтировании
+            if (scannerRef.current) {
+                scannerRef.current.clear().catch(e => console.warn("Unmount clear error", e));
+                scannerRef.current = null;
+            }
         };
-    }, []);
+    }, []);// Зависимостей нет, чтобы не перезапускать
 
     const handleScan = async (code: string) => {
         setLoading(true);
         try {
-            const response = await api.get(`/units/qr/${code}`);
-            setUnit(response.data);
-        } catch (error: any) {
-            if (error.response?.status === 404) {
-                message.error('Оборудование с таким QR не найдено');
+            if (selectedInvoiceId) {
+                // Ищем в рамках накладной
+                const res = await api.get(`/invoices/${selectedInvoiceId}/scan?qrCode=${code}`);
+                message.success(`Найдено в накладной: ${res.data.unitName || res.data.serialNumber}`);
+                // Можно установить unit из res.data, если бэкенд отдает полные данные
             } else {
-                message.error('Ошибка при поиске оборудования');
+                // Обычный поиск
+                const response = await api.get(`/units/qr/${code}`);
+                setUnit(response.data);
             }
+        } catch (error: any) {
+            message.error(error.response?.data?.message || 'Ошибка сканирования');
         } finally {
             setLoading(false);
         }
@@ -93,11 +136,37 @@ export default function ScanPage() {
                 <Typography.Title level={3} style={{ margin: 0 }}>Сканер QR</Typography.Title>
 
                 {/* Блок сканера */}
-                <Card title="Наведите камеру на QR-код">
-                    <div id="reader" style={{ width: '100%' }}></div>
+                <Card title="Выберите накладную (опционально)">
+                    <Select
+                        allowClear
+                        placeholder="Без накладной (просто поиск)"
+                        style={{ width: '100%' }}
+                        onChange={(val) => setSelectedInvoiceId(val || null)}
+                        options={invoices.map(i => ({
+                            value: i.id,
+                            label: `№${i.id} (${i.status === 'draft' ? 'Черновик' : 'Отгружена'}) - ${i.customer}`
+                        }))}
+                    />
                 </Card>
 
-                {/* Ручной ввод (для сканера-пистолета или если камера не работает) */}
+                <Card title="Наведите камеру на QR-код">
+                    {/* Текст-заглушка, который React контролирует */}
+                    <Typography.Text style={{ color: '#888', display: 'block', marginBottom: 8 }}>
+                        Загрузка камеры...
+                    </Typography.Text>
+
+                    {/* Пустой контейнер, которым полностью владеет html5-qrcode */}
+                    <div
+                        id="reader"
+                        style={{
+                            width: '100%',
+                            minHeight: '300px',
+                            background: '#000'
+                        }}
+                    />
+                </Card>
+
+                {/* Ручной ввод */}
                 <Card title="Или введите код вручную">
                     <Space.Compact style={{ width: '100%' }}>
                         <Input
